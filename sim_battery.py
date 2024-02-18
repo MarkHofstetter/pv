@@ -22,18 +22,6 @@ parser.add_argument('--capacity', type=float, required=True, help='Capacity of b
 
 args = parser.parse_args()
 
-sum = 0
-sum_feedin = 0
-sum_consumption = 0
-
-sim_consumption = 0
-sim_feedin = 0
-
-bat_capacity = args.capacity
-bat_charge = 0
-bat_consumed = 0
-
-direct_use = 0
 
 saved = 0
 def convert_cell(cell):
@@ -64,21 +52,31 @@ consumption_col = 3
 # feedin_col = 3
 # consumption_col = 1
 
+sum = {}
 dates = []
-pv = []
-net = []
-bat = []
-agg_feedin = []
-agg_sim_feedin = []
-agg_consumption = []
-agg_sim_consumption = []
-agg_saved = []
+sum['pv'] = []
+sum['net'] = []
+sum['bat'] = []
+sum['agg_feedin'] = []
+sum['agg_sim_feedin'] = []
+sum['agg_consumption'] = []
+sum['agg_sim_consumption'] = []
+sum['agg_saved'] = []
+sum['feedin'] = 0
+sum['consumption'] = 0
+sum['sim_consumption'] = 0
+sum['sim_feedin'] = 0
 
+bat_capacity = args.capacity
+bat_charge = 0
+bat_consumed = 0
+direct_use = 0
 for row in data[1:]:
+    
     feedin = convert_cell(row[feedin_col])
     consumption = convert_cell(row[consumption_col])
-    sum_feedin += feedin
-    sum_consumption += consumption
+    sum['feedin'] += feedin
+    sum['consumption'] += consumption
     error_line = ''
     
     '''
@@ -92,18 +90,18 @@ for row in data[1:]:
         if bat_charge - net_usage < 0:            
             real_consumption =  bat_charge
             error_line = f"uc {real_consumption}  {net_usage}"      
-            sim_consumption += net_usage - real_consumption 
+            sum['sim_consumption'] += net_usage - real_consumption 
         bat_charge -= real_consumption        
         bat_consumed += real_consumption
     elif net_usage > 0 and bat_charge <= 0:
-        sim_consumption += net_usage      
+        sum['sim_consumption'] += net_usage      
     # charge battery           
     elif net_usage <= 0 and bat_charge <= bat_capacity:
         real_charge = net_usage
         if bat_charge - net_usage >= bat_capacity:
             real_charge =  bat_capacity - bat_charge
             error_line = f"oc {bat_charge} {net_usage} {real_charge} {-net_usage - real_charge}"            
-            sim_feedin += (-net_usage - real_charge)
+            sum['sim_feedin'] += (-net_usage - real_charge)
             real_charge *= -1                          
             direct_use += -real_charge         
         bat_charge += -real_charge
@@ -111,28 +109,28 @@ for row in data[1:]:
     # battery full => deliver to net
     elif net_usage <= 0 and bat_charge > bat_capacity:        
         error_line = f"to net {-net_usage}"
-        sim_feedin += -net_usage
+        sum['sim_feedin'] += -net_usage
     else: 
         error_line = 'X'
         print("XXX fehler")
     
     dates.append(row[0])
-    pv.append(-feedin)
-    net.append(consumption)
-    bat.append(bat_charge)
-    agg_saved.append(saved)
-    agg_feedin.append(sum_feedin)
-    agg_sim_feedin.append(sim_feedin)
-    agg_consumption.append(sum_consumption)
-    agg_sim_consumption.append(sim_consumption)
+    sum['pv'].append(-feedin)
+    sum['net'].append(consumption)
+    sum['bat'].append(bat_charge)
+    sum['agg_saved'].append(saved)
+    sum['agg_feedin'].append(sum['feedin'])
+    sum['agg_sim_feedin'].append(sum['sim_feedin'])
+    sum['agg_consumption'].append(sum['consumption'])
+    sum['agg_sim_consumption'].append(sum['sim_consumption'])
 
     table.append({'net_usage': net_usage, 
                   'feedin': feedin, 
                   'consumption': consumption, 
-                  'sim_feedin': sim_feedin, 
-                  'sim_consumption': sim_consumption, 
-                  'sum_feedin': sum_feedin, 
-                  'sum_consumption': sum_consumption, 
+                  'sim_feedin': sum['sim_feedin'], 
+                  'sim_consumption': sum['sim_consumption'], 
+                  'sum feedin': sum['feedin'], 
+                  'sum consumption': sum['consumption'], 
                   'bat_charge': bat_charge,
                   'saved': saved,
                   'error_line': error_line
@@ -151,26 +149,26 @@ fig, ax = plt.subplots(3, sharex=True)
 
 linewidth=0.3
 
-ax[0].plot(dates, pv, label='PV Einlieferung', linewidth=linewidth)
-ax[0].plot(dates, net, label='Netz', linewidth=linewidth)
-pv_av = movingaverage(pv, 96)
+ax[0].plot(dates, sum['pv'], label='PV Einlieferung', linewidth=linewidth)
+ax[0].plot(dates, sum['net'], label='Netz', linewidth=linewidth)
+pv_av = movingaverage(sum['pv'], 96)
 ax[0].plot(dates, pv_av, label='PV avg', linewidth=linewidth*2)
-net_av = movingaverage(net, 96)
+net_av = movingaverage(sum['net'], 96)
 ax[0].plot(dates, net_av, label='Netz avg', linewidth=linewidth*2)
 
-bat_av = movingaverage(bat, 96)
-ax[1].plot(dates, bat, label='Ladezustand', linewidth=linewidth)
+bat_av = movingaverage(sum['bat'], 96)
+ax[1].plot(dates, sum['bat'], label='Ladezustand', linewidth=linewidth)
 ax[1].plot(dates, bat_av, label='Ladezustand avg', linewidth=linewidth*2)
 ax[1].set_ylim(0, bat_capacity * 1.1)
 
 ax[0].xaxis.set_major_locator(mdates.MonthLocator())
 ax[0].xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.%Y'))
 
-ax[2].plot(dates, agg_saved, label='From Battery', linewidth=linewidth)
-ax[2].plot(dates, agg_feedin, label='PV to net', linewidth=linewidth)
-ax[2].plot(dates, agg_sim_feedin, label='PV to net simulated', linewidth=linewidth)
-ax[2].plot(dates, agg_consumption, label='From Net', linewidth=linewidth)
-ax[2].plot(dates, agg_sim_consumption, label='From Net simulated', linewidth=linewidth)
+ax[2].plot(dates, sum['agg_saved'], label='From Battery', linewidth=linewidth)
+ax[2].plot(dates, sum['agg_feedin'], label='PV to net', linewidth=linewidth)
+ax[2].plot(dates, sum['agg_sim_feedin'], label='PV to net simulated', linewidth=linewidth)
+ax[2].plot(dates, sum['agg_consumption'], label='From Net', linewidth=linewidth)
+ax[2].plot(dates, sum['agg_sim_consumption'], label='From Net simulated', linewidth=linewidth)
 # ax[2].xaxis.label.set_size(2)
 # ax[2].plot(dates, bat_av, label='Ladezustand avg', linewidth=linewidth*2)
 # ax[2].set_ylim(0, bat_capacity * 1.1)
@@ -193,8 +191,8 @@ plt.setp(ax[2], ylabel='kWh', )
 plt.savefig('fig.png', dpi=300)
 
 # print(tabulate(table, headers="keys", tablefmt="grid"))    
-print("feedin %.2f - %.2f" % (sum_feedin, sim_feedin))
-print("consumption   %.2f - %.2f" % (sum_consumption, sim_consumption))
-print("netto - sim netto - saved %.2f - %.2f - %.2f - %.2f" % (sum_feedin-sum_consumption, sim_feedin-sim_consumption, saved, bat_consumed))
+print("feedin %.2f - %.2f" % (sum['feedin'], sum['sim_feedin']))
+print("consumption   %.2f - %.2f" % (sum['consumption'], sum['sim_consumption']))
+print("netto - sim netto - saved %.2f - %.2f - %.2f - %.2f" % (sum['feedin']-sum['consumption'], sum['sim_feedin']-sum['sim_consumption'], saved, bat_consumed))
 print("Ladezustand %.2f  - direct use %.2f " % (bat_charge, direct_use ))
 
